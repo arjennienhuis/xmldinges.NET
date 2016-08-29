@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Xml.Linq;
 using Microsoft.Extensions.PlatformAbstractions;
@@ -6,7 +6,6 @@ using Newtonsoft.Json;
 using Npgsql;
 using NpgsqlTypes;
 using System.Collections.Generic;
-using System.Data.Spatial.DbGeography;
 
 namespace ConsoleApplication
 {
@@ -20,7 +19,7 @@ namespace ConsoleApplication
             var start = DateTime.Now;
             Action<string> Log = s => Console.WriteLine($"{(DateTime.Now - start).TotalSeconds,9:###0.000}: {s}");
 
-            Log($".NET Version {PlatformServices.Default.Application.RuntimeFramework.Version}");
+            Log($".NET Version {PlatformServices.Default.Application.RuntimeFramework.FullName}");
 
             XNamespace BAGlvc = XMLNS_BAG_LVC;
             XNamespace BAGtype = XMLNS_BAG_TYPE;
@@ -58,13 +57,13 @@ namespace ConsoleApplication
                         BegindatumTijdvakGeldigheid = tv.Element(begindatumTijdvakGeldigheid)?.Value,
                         EinddatumTijdvakGeldigheid = tv.Element(einddatumTijdvakGeldigheid)?.Value,
                         WoonplaatsNaam = e.Element(WoonplaatsNaam).Value,
-                        WoonplaatsGeometrie = e.Element(WoonplaatsGeometrie).Elements().Single().ToString(),
+                        WoonplaatsGeometrie = parseGML(e.Element(WoonplaatsGeometrie).Elements().Single()),
                     };
                 });//.ToList();
             //Console.WriteLine(JsonConvert.SerializeObject(parsed, Formatting.Indented));
 
             Log("Connecting to database");
-            using (var c = new Npgsql.NpgsqlConnection("Host=localhost;Username=test;Port=5434;Password=test"))
+            using (var c = new Npgsql.NpgsqlConnection("Host=192.168.3.1;Username=test;Port=5434;Password=test"))
             {
                 c.Open();
                 using (var t = c.BeginTransaction())
@@ -78,17 +77,72 @@ namespace ConsoleApplication
 
                     Copy(
                         c,
-                        "woonplaats", 
-                        new[] { "identificatie", "aanduidingrecordinactief", "woonplaatsnaam", "woonplaatsgeometrie" }, 
+                        "woonplaats",
+                        new[] { "identificatie", "aanduidingrecordinactief", "woonplaatsnaam", "woonplaatsgeometrie" },
                         parsed.Select(p => new object[] { p.Identificatie, p.AanduidingRecordInactief, p.WoonplaatsNaam, p.WoonplaatsGeometrie })
                     );
-
                     Log("COMMIT");
                     t.Commit();
                 }
             }
             Log("All done");
-            // Console.ReadKey();
+            Console.ReadKey();
+        }
+
+        static XNamespace GML = "http://www.opengis.net/gml";
+        static XName GMLMultiSurface = GML + "MultiSurface";
+        static XName GMLsurfaceMember = GML + "surfaceMember";
+        static XName GMLPolygon = GML + "Polygon";
+        static XName GMLexterior = GML + "exterior";
+        static XName GMLinterior = GML + "interior";
+        static XName GMLLinearRing = GML + "LinearRing";
+        static XName GMLposList = GML + "posList";
+
+        private static PostgisGeometry parseGML(XElement gmlElement)
+        {
+            uint srid = 0;
+            var srsName = gmlElement.Attribute("srsName")?.Value;
+
+            if (srsName != null)
+            {
+                const string PREFIX = "urn:ogc:def:crs:EPSG::";
+                if (srsName != null && !srsName.StartsWith(PREFIX))
+                    throw new NotImplementedException($"Unknown srsName: {srsName}");
+
+                srid = uint.Parse(srsName.Substring(PREFIX.Length));
+            }
+
+            if (gmlElement.Name == GMLPolygon)
+            {
+                var exterior = gmlElement.Elements(GMLexterior).Single();
+                var interiors = gmlElement.Elements(GMLinterior);
+                var iors = (new[] { exterior }).Union(interiors);
+                return new PostgisPolygon(iors.Select(e => parseGMLRing(e.Elements(GMLLinearRing).Single()))) { SRID = srid };
+            }
+            else if (gmlElement.Name == GMLMultiSurface)
+            {
+                var inners = gmlElement.Elements(GMLsurfaceMember).Select(e => parseGML(e.Elements().Single()));
+                return new PostgisGeometryCollection(inners) { SRID = srid };
+            }
+            else
+                throw new NotImplementedException($"No pg conversion for {gmlElement.Name}");
+
+        }
+
+        private static Coordinate2D[] parseGMLRing(XElement ringElement)
+        {
+            var poslist = ringElement.Elements(GMLposList).Single();
+            if (poslist.Attribute("srsDimension").Value != "2")
+                throw new NotImplementedException("taart");
+
+            var numbers = poslist.Value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            var r = new Coordinate2D[numbers.Length / 2];
+            for (int i = 0; i < r.Length; i++)
+            {
+                r[i].X = double.Parse(numbers[i * 2]);
+                r[i].Y = double.Parse(numbers[i * 2 + 1]);
+            }
+            return r;
         }
 
         static List<Type> GetColumnTypes(NpgsqlConnection conn, string tablename, IEnumerable<string> colnames)
