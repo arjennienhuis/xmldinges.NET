@@ -17,3 +17,6 @@ node_modules
 .nuget/NuGet.exe
 project.lock.json
 
+
+.vs/restore.dg
+.vs/config/applicationhost.config

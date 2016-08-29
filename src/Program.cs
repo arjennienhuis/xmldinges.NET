@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Npgsql;
 using NpgsqlTypes;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace ConsoleApplication
 {
@@ -37,6 +38,16 @@ namespace ConsoleApplication
                                                s == "N" ? false :
                                                (bool?)null;
 
+            var CET = TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
+
+            Func<string, DateTime?> parseDate = s => {
+                if (s == null)
+                    return null;
+
+                var d = DateTime.ParseExact(s, "yyyyMMddHHmmssff", CultureInfo.InvariantCulture);
+                return TimeZoneInfo.ConvertTime(d, CET, TimeZoneInfo.Utc);
+            };
+
             Log("Parsing XML");
 
             var parsed = XElement.Load("test.xml").Descendants(Woonplaats).Select(e =>
@@ -54,8 +65,8 @@ namespace ConsoleApplication
                     {
                         Identificatie = e.Element(Identificatie).Value,
                         AanduidingRecordInactief = parseJN(e.Element(AanduidingRecordInactief).Value).Value,
-                        BegindatumTijdvakGeldigheid = tv.Element(begindatumTijdvakGeldigheid)?.Value,
-                        EinddatumTijdvakGeldigheid = tv.Element(einddatumTijdvakGeldigheid)?.Value,
+                        BegindatumTijdvakGeldigheid = parseDate(tv.Element(begindatumTijdvakGeldigheid)?.Value),
+                        EinddatumTijdvakGeldigheid = parseDate(tv.Element(einddatumTijdvakGeldigheid)?.Value),
                         WoonplaatsNaam = e.Element(WoonplaatsNaam).Value,
                         WoonplaatsGeometrie = parseGML(e.Element(WoonplaatsGeometrie).Elements().Single()),
                     };
@@ -68,7 +79,6 @@ namespace ConsoleApplication
                 c.Open();
                 using (var t = c.BeginTransaction())
                 {
-                    GetColumnTypes(c, "woonplaats", new[] { "identificatie", "aanduidingrecordinactief", "woonplaatsnaam", "woonplaatsgeometrie" });
                     Log("TRUNCATE woonplaats");
                     using (var cmd = new NpgsqlCommand("TRUNCATE woonplaats", c))
                         cmd.ExecuteNonQuery();
@@ -78,8 +88,24 @@ namespace ConsoleApplication
                     Copy(
                         c,
                         "woonplaats",
-                        new[] { "identificatie", "aanduidingrecordinactief", "woonplaatsnaam", "woonplaatsgeometrie" },
-                        parsed.Select(p => new object[] { p.Identificatie, p.AanduidingRecordInactief, p.WoonplaatsNaam, p.WoonplaatsGeometrie })
+                        new[] {
+                            "identificatie",
+                            "aanduidingrecordinactief",
+                            "woonplaatsnaam",
+                            "woonplaatsgeometrie",
+                            "begindatumtijdvakgeldigheid",
+                            "einddatumtijdvakgeldigheid",
+                        },
+                        parsed.Select(
+                            p => new object[] {
+                                p.Identificatie,
+                                p.AanduidingRecordInactief,
+                                p.WoonplaatsNaam,
+                                p.WoonplaatsGeometrie,
+                                p.BegindatumTijdvakGeldigheid,
+                                p.EinddatumTijdvakGeldigheid,
+                            }
+                        )
                     );
                     Log("COMMIT");
                     t.Commit();
@@ -87,6 +113,37 @@ namespace ConsoleApplication
             }
             Log("All done");
             Console.ReadKey();
+        }
+
+        private static void TestMultiGeometry(NpgsqlConnection c)
+        {
+            c.Open();
+            using (var t = c.BeginTransaction())
+            {
+                using (var cmd = new NpgsqlCommand("CREATE TEMPORARY TABLE test (g geometry)", c))
+                    cmd.ExecuteNonQuery();
+
+                var qry = $"COPY test (g) FROM STDIN (FORMAT BINARY)";
+
+                using (var writer = c.BeginBinaryImport(qry))
+                {
+                    var p1 = new Coordinate2D(0, 0);
+                    var p2 = new Coordinate2D(0, 0);
+                    var p3 = new Coordinate2D(0, 0);
+                    var p = new PostgisPolygon(new[] { new[] { p1, p2, p3, p1 } });
+                    var m = new PostgisGeometryCollection(new[] { p });
+                    for (int i = 0; i < 1000; i++)
+                        writer.WriteRow(m);
+                }
+
+                using (var cmd = new NpgsqlCommand("SELECT count(*) FROM test", c))
+                    Console.WriteLine(cmd.ExecuteScalar());
+
+                using (var cmd = new NpgsqlCommand("DROP TABLE test", c))
+                    cmd.ExecuteNonQuery();
+
+            }
+            c.Close();
         }
 
         static XNamespace GML = "http://www.opengis.net/gml";
@@ -121,8 +178,12 @@ namespace ConsoleApplication
             }
             else if (gmlElement.Name == GMLMultiSurface)
             {
-                var inners = gmlElement.Elements(GMLsurfaceMember).Select(e => parseGML(e.Elements().Single()));
-                return new PostgisGeometryCollection(inners) { SRID = srid };
+                var inners = gmlElement.Elements(GMLsurfaceMember).Select(e => parseGML(e.Elements().Single())).ToArray();
+                var all_poygons = inners.All(e => e is PostgisPolygon);
+                if (all_poygons)
+                    return new PostgisMultiPolygon(inners.Cast<PostgisPolygon>());
+                else
+                    return new PostgisGeometryCollection(inners) { SRID = srid };
             }
             else
                 throw new NotImplementedException($"No pg conversion for {gmlElement.Name}");
@@ -164,6 +225,7 @@ namespace ConsoleApplication
             [typeof(string)] = NpgsqlDbType.Text,
             [typeof(bool)] = NpgsqlDbType.Boolean,
             [typeof(PostgisGeometry)] = NpgsqlDbType.Geometry,
+            [typeof(System.DateTime)] = NpgsqlDbType.TimestampTZ,
         };
 
         static NpgsqlDbType GetTypeType(Type type)
