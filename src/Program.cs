@@ -53,8 +53,6 @@ namespace ConsoleApplication
                 CET = TimeZoneInfo.FindSystemTimeZoneById("CET");
             }
 
-            var f = true;
-
             Func<string, DateTime?> parseDate = s => {
                 if (s == null)
                     return null;
@@ -101,8 +99,8 @@ namespace ConsoleApplication
 
                     Copy(
                         c,
-                        "woonplaats",
-                        new[] {
+                        tablename: "woonplaats",
+                        colnames: new[] {
                             "identificatie",
                             "aanduidingrecordinactief",
                             "woonplaatsnaam",
@@ -114,7 +112,7 @@ namespace ConsoleApplication
                             "aanduidingrecordcorrectie",
                             "woonplaatsgeometrie",
                         },
-                        parsed.Select(
+                        data: parsed.Select(
                             p => new object[] {
                                 p.Identificatie,
                                 p.AanduidingRecordInactief,
@@ -125,11 +123,7 @@ namespace ConsoleApplication
                                 p.InOnderzoek,
                                 p.WoonplaatsStatus,
                                 p.AanduidingRecordCorrectie,
-                                // p.WoonplaatsGeometrie,
-                                new PostgisGeometryCollection(new[] { 
-                                    new PostgisGeometryCollection( new[] { new PostgisGeometryCollection( new[] {new PostgisPoint(2,1) } )} ), 
-                                    new PostgisGeometryCollection( new PostgisPoint[] {  } )
-                                } ) { SRID = 1234 },
+                                p.WoonplaatsGeometrie,
                             }
                         )
                     );
@@ -242,35 +236,9 @@ namespace ConsoleApplication
                 return r.GetColumnSchema().ToList();
         }
 
-        static Dictionary<uint, NpgsqlDbType> TypeOIDTypeMap = new Dictionary<uint, NpgsqlDbType>
+        static NpgsqlDbType GetColumnNpgsqlDbType(NpgsqlDbColumn c)
         {
-            [1082] = NpgsqlDbType.Date,
-            [1184] = NpgsqlDbType.TimestampTZ,
-            [1114] = NpgsqlDbType.Timestamp,
-        };
-
-        static Dictionary<Type, NpgsqlDbType> TypeTypeMap = new Dictionary<Type, NpgsqlDbType>
-        {
-            [typeof(Int64)] = NpgsqlDbType.Bigint,
-            [typeof(Int32)] = NpgsqlDbType.Integer,
-            [typeof(Int16)] = NpgsqlDbType.Smallint,
-            [typeof(string)] = NpgsqlDbType.Text,
-            [typeof(bool)] = NpgsqlDbType.Boolean,
-            [typeof(PostgisGeometry)] = NpgsqlDbType.Geometry,
-        };
-
-        static NpgsqlDbType GetTypeType(NpgsqlDbColumn c)
-        {
-            Console.WriteLine($"TYPE: {c.DataType} {c.DataTypeName} {c.TypeOID}");
-            NpgsqlDbType result;
-            if (
-                TypeOIDTypeMap.TryGetValue(c.TypeOID, out result)
-                || 
-                TypeTypeMap.TryGetValue(c.DataType, out result)
-            )
-                return result;
-            else
-                throw new NotImplementedException($"No pg conversion for {c.DataType}");
+            return c.PostgresType.NpgsqlDbType ?? NpgsqlDbType.Text;
         }
 
         static void Copy(NpgsqlConnection conn, string tablename, string[] colnames, IEnumerable<object[]> data)
@@ -279,7 +247,7 @@ namespace ConsoleApplication
             var sql_tablename = Q(tablename);
             var sql_colnames = string.Join(", ", colnames.Select(n => Q(n)));
             var qry = $"COPY {sql_tablename} ({sql_colnames}) FROM STDIN (FORMAT BINARY)";
-            var types = GetColumnTypes(conn, tablename, colnames).Select(s => GetTypeType(s)).ToArray();
+            var types = GetColumnTypes(conn, tablename, colnames).Select(s => GetColumnNpgsqlDbType(s)).ToArray();
 
             using (var writer = conn.BeginBinaryImport(qry))
             {
