@@ -1,5 +1,3 @@
 {
-  "projects": [
-    "src"
-  ]
+  "projects": [ "src", "npgsql/src" ]
 }

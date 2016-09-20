@@ -5,6 +5,7 @@ using Microsoft.Extensions.PlatformAbstractions;
 using Newtonsoft.Json;
 using Npgsql;
 using NpgsqlTypes;
+using Npgsql.Schema;
 using System.Collections.Generic;
 using System.Globalization;
 
@@ -33,12 +34,26 @@ namespace ConsoleApplication
             var einddatumTijdvakGeldigheid = BAGtype + "einddatumTijdvakGeldigheid";
             var WoonplaatsNaam = BAGlvc + "woonplaatsNaam";
             var WoonplaatsGeometrie = BAGlvc + "woonplaatsGeometrie";
+            var AanduidingRecordCorrectie = BAGlvc + "aanduidingRecordCorrectie";
+            var Officieel = BAGlvc + "officieel";
+            var InOnderzoek = BAGlvc + "inOnderzoek";
+            var Bron = BAGlvc + "bron";
+            var WoonplaatsStatus = BAGlvc + "woonplaatsStatus";
 
             Func<string, bool?> parseJN = s => s == "J" ? true :
                                                s == "N" ? false :
                                                (bool?)null;
 
-            var CET = TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
+            TimeZoneInfo CET;
+            try {
+                CET = TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
+            }
+            catch
+            {
+                CET = TimeZoneInfo.FindSystemTimeZoneById("CET");
+            }
+
+            var f = true;
 
             Func<string, DateTime?> parseDate = s => {
                 if (s == null)
@@ -53,11 +68,6 @@ namespace ConsoleApplication
             var parsed = XElement.Load("test.xml").Descendants(Woonplaats).Select(e =>
                 {
                     /*
-                        BAGlvc + "aanduidingRecordCorrectie"
-                        BAGlvc + "officieel"
-                        BAGlvc + "inOnderzoek"
-                        BAGlvc + "bron"
-                        BAGlvc + "woonplaatsStatus"
                     */
                     //Console.WriteLine(string.Join("\t", e.Elements().Select(x => x.Name)));
                     var tv = e.Element(Tijdvakgeldigheid);
@@ -65,6 +75,10 @@ namespace ConsoleApplication
                     {
                         Identificatie = e.Element(Identificatie).Value,
                         AanduidingRecordInactief = parseJN(e.Element(AanduidingRecordInactief).Value).Value,
+                        Officieel = parseJN(e.Element(Officieel).Value).Value,
+                        InOnderzoek = parseJN(e.Element(InOnderzoek).Value).Value,
+                        WoonplaatsStatus = e.Element(WoonplaatsStatus).Value,
+                        AanduidingRecordCorrectie = int.Parse(e.Element(AanduidingRecordCorrectie).Value),
                         BegindatumTijdvakGeldigheid = parseDate(tv.Element(begindatumTijdvakGeldigheid)?.Value),
                         EinddatumTijdvakGeldigheid = parseDate(tv.Element(einddatumTijdvakGeldigheid)?.Value),
                         WoonplaatsNaam = e.Element(WoonplaatsNaam).Value,
@@ -92,18 +106,30 @@ namespace ConsoleApplication
                             "identificatie",
                             "aanduidingrecordinactief",
                             "woonplaatsnaam",
-                            "woonplaatsgeometrie",
                             "begindatumtijdvakgeldigheid",
                             "einddatumtijdvakgeldigheid",
+                            "officieel",
+                            "inonderzoek",
+                            "woonplaatsstatus",
+                            "aanduidingrecordcorrectie",
+                            "woonplaatsgeometrie",
                         },
                         parsed.Select(
                             p => new object[] {
                                 p.Identificatie,
                                 p.AanduidingRecordInactief,
                                 p.WoonplaatsNaam,
-                                p.WoonplaatsGeometrie,
                                 p.BegindatumTijdvakGeldigheid,
                                 p.EinddatumTijdvakGeldigheid,
+                                p.Officieel,
+                                p.InOnderzoek,
+                                p.WoonplaatsStatus,
+                                p.AanduidingRecordCorrectie,
+                                // p.WoonplaatsGeometrie,
+                                new PostgisGeometryCollection(new[] { 
+                                    new PostgisGeometryCollection( new[] { new PostgisGeometryCollection( new[] {new PostgisPoint(2,1) } )} ), 
+                                    new PostgisGeometryCollection( new PostgisPoint[] {  } )
+                                } ) { SRID = 1234 },
                             }
                         )
                     );
@@ -181,7 +207,7 @@ namespace ConsoleApplication
                 var inners = gmlElement.Elements(GMLsurfaceMember).Select(e => parseGML(e.Elements().Single())).ToArray();
                 var all_poygons = inners.All(e => e is PostgisPolygon);
                 if (all_poygons)
-                    return new PostgisMultiPolygon(inners.Cast<PostgisPolygon>());
+                    return new PostgisMultiPolygon(inners.Cast<PostgisPolygon>()) { SRID = srid };
                 else
                     return new PostgisGeometryCollection(inners) { SRID = srid };
             }
@@ -200,13 +226,12 @@ namespace ConsoleApplication
             var r = new Coordinate2D[numbers.Length / 2];
             for (int i = 0; i < r.Length; i++)
             {
-                r[i].X = double.Parse(numbers[i * 2]);
-                r[i].Y = double.Parse(numbers[i * 2 + 1]);
+                r[i] = new Coordinate2D(double.Parse(numbers[i * 2]), double.Parse(numbers[i * 2 + 1]));
             }
             return r;
         }
 
-        static List<Type> GetColumnTypes(NpgsqlConnection conn, string tablename, IEnumerable<string> colnames)
+        static List<NpgsqlDbColumn> GetColumnTypes(NpgsqlConnection conn, string tablename, IEnumerable<string> colnames)
         {
             Func<string, string> Q = n => "\"" + n.Replace("\"", "\"\"") + "\"";
             var sql_tablename = Q(tablename);
@@ -214,8 +239,15 @@ namespace ConsoleApplication
             var qry = $"SELECT {sql_colnames} FROM {sql_tablename} LIMIT 0";
             using (var cmd = new NpgsqlCommand(qry, conn))
             using (var r = cmd.ExecuteReader(System.Data.CommandBehavior.SchemaOnly))
-                return r.GetColumnSchema().Select(s => s.DataType).ToList();
+                return r.GetColumnSchema().ToList();
         }
+
+        static Dictionary<uint, NpgsqlDbType> TypeOIDTypeMap = new Dictionary<uint, NpgsqlDbType>
+        {
+            [1082] = NpgsqlDbType.Date,
+            [1184] = NpgsqlDbType.TimestampTZ,
+            [1114] = NpgsqlDbType.Timestamp,
+        };
 
         static Dictionary<Type, NpgsqlDbType> TypeTypeMap = new Dictionary<Type, NpgsqlDbType>
         {
@@ -225,16 +257,20 @@ namespace ConsoleApplication
             [typeof(string)] = NpgsqlDbType.Text,
             [typeof(bool)] = NpgsqlDbType.Boolean,
             [typeof(PostgisGeometry)] = NpgsqlDbType.Geometry,
-            [typeof(System.DateTime)] = NpgsqlDbType.TimestampTZ,
         };
 
-        static NpgsqlDbType GetTypeType(Type type)
+        static NpgsqlDbType GetTypeType(NpgsqlDbColumn c)
         {
+            Console.WriteLine($"TYPE: {c.DataType} {c.DataTypeName} {c.TypeOID}");
             NpgsqlDbType result;
-            if (TypeTypeMap.TryGetValue(type, out result))
+            if (
+                TypeOIDTypeMap.TryGetValue(c.TypeOID, out result)
+                || 
+                TypeTypeMap.TryGetValue(c.DataType, out result)
+            )
                 return result;
             else
-                throw new NotImplementedException($"No pg conversion for {type}");
+                throw new NotImplementedException($"No pg conversion for {c.DataType}");
         }
 
         static void Copy(NpgsqlConnection conn, string tablename, string[] colnames, IEnumerable<object[]> data)
