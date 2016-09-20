@@ -45,7 +45,8 @@ namespace ConsoleApplication
                                                (bool?)null;
 
             TimeZoneInfo CET;
-            try {
+            try
+            {
                 CET = TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
             }
             catch
@@ -53,7 +54,8 @@ namespace ConsoleApplication
                 CET = TimeZoneInfo.FindSystemTimeZoneById("CET");
             }
 
-            Func<string, DateTime?> parseDate = s => {
+            Func<string, DateTime?> parseDate = s =>
+            {
                 if (s == null)
                     return null;
 
