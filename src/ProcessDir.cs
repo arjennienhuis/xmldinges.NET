@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -13,6 +13,7 @@ namespace xmldinges.NET
         public static void OpenAll(string basepath, Action<string> Log)
         {
             Regex is_wpl = new Regex(@"^9999WPL[0-9]{8}\.zip$");
+            Regex is_num = new Regex(@"^9999NUM[0-9]{8}\.zip$");
             Regex is_vbo = new Regex(@"^9999VBO[0-9]{8}\.zip$");
             Regex is_gem_wpl = new Regex(@"^GEM-WPL-RELATIE-[0-9]{8}\.zip$");
             Regex is_zip = new Regex(@"^9999...[0-9]{8}\.zip$");
@@ -37,6 +38,10 @@ namespace xmldinges.NET
                 else if (is_gem_wpl.IsMatch(filename))
                 {
                     // ignore...
+                }
+                else if (is_num.IsMatch(filename))
+                {
+                    addziptask(es => Program.Import(es.Select(e => e.Open()), Log: s => Log($"NUM: {s}"), key: "NUM"));
                 }
                 else if (is_wpl.IsMatch(filename))
                 {

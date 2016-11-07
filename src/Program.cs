@@ -57,6 +57,7 @@ namespace ConsoleApplication
 
         static readonly XNamespace NS_BAG_LVC = XMLNS_BAG_LVC;
         static readonly XNamespace NS_BAG_TYPE = XMLNS_BAG_TYPE;
+        static readonly XName BAG_LVC_Nummeraanduiding = NS_BAG_LVC + "Nummeraanduiding";
         static readonly XName BAG_LVC_Woonplaats = NS_BAG_LVC + "Woonplaats";
         static readonly XName BAG_LVC_Verblijfsobject = NS_BAG_LVC + "Verblijfsobject";
         static readonly XName BAG_LVC_Identificatie = NS_BAG_LVC + "identificatie";
@@ -79,6 +80,15 @@ namespace ConsoleApplication
         static readonly XName BAG_LVC_hoofdadres = NS_BAG_LVC + "hoofdadres";
         static readonly XName BAG_LVC_nevenadres = NS_BAG_LVC + "nevenadres";
         static readonly XName BAG_LVC_oppervlakteVerblijfsobject = NS_BAG_LVC + "oppervlakteVerblijfsobject";
+        static readonly XName BAG_LVC_huisnummer = NS_BAG_LVC + "huisnummer";
+        static readonly XName BAG_LVC_huisletter = NS_BAG_LVC + "huisletter";
+        static readonly XName BAG_LVC_huisnummertoevoeging = NS_BAG_LVC + "huisnummertoevoeging";
+        static readonly XName BAG_LVC_postcode = NS_BAG_LVC + "postcode";
+        static readonly XName BAG_LVC_GerelateerdeWoonplaats = NS_BAG_LVC + "GerelateerdeWoonplaats";
+        static readonly XName BAG_LVC_gerelateerdeOpenbareRuimte = NS_BAG_LVC + "gerelateerdeOpenbareRuimte";
+        static readonly XName BAG_LVC_typeAdresseerbaarObject = NS_BAG_LVC + "typeAdresseerbaarObject";
+        static readonly XName BAG_LVC_nummeraanduidingStatus = NS_BAG_LVC + "nummeraanduidingStatus";
+
 
         struct ImportParams
         {
@@ -90,20 +100,94 @@ namespace ConsoleApplication
 
         static Dictionary<string, ImportParams> ParamsDict = new Dictionary<string, ImportParams>()
         {
-            ["WPL"] = new ImportParams
+            ["NUM"] = new ImportParams
             {
-                table_name = "woonplaats",
+                /*
+                    11.02 Identificatiecode nummeraanduiding
+                    11.20 Huisnummer
+                    11.21 Indicatie geconstateerde nummeraanduiding
+                    11.30 Huisletter
+                    11.40 Huisnummertoevoeging
+                    11.60 Postcode
+                    11.61 Identificatiecode bijbehorende woonplaats
+                    11.62 Datum begin geldigheid nummeraanduidinggegevens
+                    11.63 Datum einde geldigheid nummeraanduidinggegevens
+                    11.64 Aanduiding nummeraanduidinggegevens in onderzoek
+                    11.65 Identificatiecode bijbehorende openbare ruimte
+                    11.66 Type adresseerbaar object
+                    11.67 Documentdatum mutatie nummeraanduiding
+                    11.68 Documentnummer mutatie nummeraanduiding
+                    11.69 Nummeraanduidingstatus 
+                */
+                table_name = "nummeraanduiding",
                 column_names = new[] {
                     "identificatie",
                     "aanduidingrecordinactief",
+                    "aanduidingrecordcorrectie",
+                    "officieel",
+                    "huisnummer",
+                    "huisletter",
+                    "toevoeging",
+                    "postcode",
+                    "woonplaats_id",
+                    "begindatumtijdvakgeldigheid",
+                    "einddatumtijdvakgeldigheid",
+                    "inonderzoek",
+                    "openbare_ruimte_id",
+                    "type",
+                    "status",
+                },
+                element_name = BAG_LVC_Nummeraanduiding,
+                parse = e =>
+                {
+                    var tv = e.Element(BAG_LVC_Tijdvakgeldigheid);
+                    return new object[] {
+                        e.Element(BAG_LVC_Identificatie).Value,                               // identificatie
+                        parseJN(e.Element(BAG_LVC_AanduidingRecordInactief).Value).Value,     // aanduidingrecordinactief
+                        int.Parse(e.Element(BAG_LVC_AanduidingRecordCorrectie).Value),        // aanduidingrecordcorrectie
+                        parseJN(e.Element(BAG_LVC_Officieel).Value).Value,                    // officieel
+                        e.Element(BAG_LVC_huisnummer).Value,                                  // huisnummer
+                        e.Element(BAG_LVC_huisletter)?.Value,                                 // huisletter
+                        e.Element(BAG_LVC_huisnummertoevoeging)?.Value,                       // toevoeging
+                        e.Element(BAG_LVC_postcode)?.Value,                                   // postcode
+                        e.Element(BAG_LVC_GerelateerdeWoonplaats)
+                            ?.Element(BAG_LVC_Identificatie).Value,                           // woonplaats_id
+                        parseDate(tv.Element(BAGyypebegindatumTijdvakGeldigheid)?.Value),     // begindatumtijdvakgeldigheid
+                        parseDate(tv.Element(BAGyypeeinddatumTijdvakGeldigheid)?.Value),      // einddatumtijdvakgeldigheid
+                        parseJN(e.Element(BAG_LVC_InOnderzoek).Value).Value,                  // inonderzoek
+                        e.Element(BAG_LVC_gerelateerdeOpenbareRuimte)
+                         .Element(BAG_LVC_Identificatie).Value,                               // openbare_ruimte_id
+                        e.Element(BAG_LVC_typeAdresseerbaarObject).Value,                     // type
+                        e.Element(BAG_LVC_nummeraanduidingStatus).Value,                      // status
+                   };
+                },
+            },
+            ["WPL"] = new ImportParams
+            {
+                /*
+                    11.03 Woonplaatsidentificatie
+                    11.70 Woonplaatsnaam
+                    11.71 Woonplaatsgeometrie
+                    11.72 Indicatie geconstateerde woonplaats
+                    11.73 Datum begin geldigheid woonplaatsgegevens
+                    11.74 Datum einde geldigheid woonplaatsgegevens
+                    11.75 Aanduiding woonplaatsgegevens in onderzoek
+                 !! 11.77 Documentdatum mutatie woonplaats
+                 !! 11.78 Documentnummer mutatie woonplaats
+                    11.79 Woonplaatsstatus 
+                */
+                table_name = "woonplaats",
+                column_names = new[] {
+                    "identificatie",
+                    "woonplaatsnaam",
+                    "woonplaatsgeometrie",
+                    "aanduidingrecordinactief",
                     "officieel",
                     "inonderzoek",
-                    "woonplaatsstatus",
                     "aanduidingrecordcorrectie",
                     "begindatumtijdvakgeldigheid",
                     "einddatumtijdvakgeldigheid",
-                    "woonplaatsnaam",
-                    "woonplaatsgeometrie",
+                    "woonplaatsstatus",
                 },
                 element_name = BAG_LVC_Woonplaats,
                 parse = e =>
@@ -111,15 +195,15 @@ namespace ConsoleApplication
                     var tv = e.Element(BAG_LVC_Tijdvakgeldigheid);
                     return new object[] {
                         e.Element(BAG_LVC_Identificatie).Value,                               // identificatie
+                        e.Element(BAG_LVC_WoonplaatsNaam).Value,                              // woonplaatsnaam
+                        parseGML(e.Element(BAG_LVC_WoonplaatsGeometrie).Elements().Single()), // woonplaatsgeometrie
                         parseJN(e.Element(BAG_LVC_AanduidingRecordInactief).Value).Value,     // aanduidingrecordinactief
                         parseJN(e.Element(BAG_LVC_Officieel).Value).Value,                    // officieel
                         parseJN(e.Element(BAG_LVC_InOnderzoek).Value).Value,                  // inonderzoek
-                        e.Element(BAG_LVC_WoonplaatsStatus).Value,                            // woonplaatsstatus
                         int.Parse(e.Element(BAG_LVC_AanduidingRecordCorrectie).Value),        // aanduidingrecordcorrectie
                         parseDate(tv.Element(BAGyypebegindatumTijdvakGeldigheid)?.Value),     // begindatumtijdvakgeldigheid
                         parseDate(tv.Element(BAGyypeeinddatumTijdvakGeldigheid)?.Value),      // einddatumtijdvakgeldigheid
-                        e.Element(BAG_LVC_WoonplaatsNaam).Value,                              // woonplaatsnaam
-                        parseGML(e.Element(BAG_LVC_WoonplaatsGeometrie).Elements().Single()), // woonplaatsgeometrie
+                        e.Element(BAG_LVC_WoonplaatsStatus).Value,                            // woonplaatsstatus
                    };
                 },
             },
