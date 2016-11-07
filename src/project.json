@@ -6,6 +6,7 @@
   },
   "dependencies": {
     "Microsoft.Extensions.PlatformAbstractions": "1.0.0",
+    "Microsoft.Extensions.CommandLineUtils": "1.0.0",
     "Newtonsoft.Json": "9.0.1",
     "Npgsql": "3.1.7",
     "System.Collections.Concurrent": "4.0.12",

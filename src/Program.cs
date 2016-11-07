@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
+using Microsoft.Extensions.CommandLineUtils;
 
 namespace ConsoleApplication
 {
@@ -18,13 +19,41 @@ namespace ConsoleApplication
         const string XMLNS_PRODUCT_LVC = "http://www.kadaster.nl/schemas/bag-verstrekkingen/extract-producten-lvc/v20090901";
         const string XMLNS_BAG_LVC = "http://www.kadaster.nl/schemas/imbag/lvc/v20090901";
         const string XMLNS_BAG_TYPE = "http://www.kadaster.nl/schemas/imbag/imbag-types/v20090901";
+
         public static void Main(string[] args)
+        {
+            var cla = new CommandLineApplication();
+            var import_types_arg = cla.Option(
+                "--import-types <type>",
+                $"Type of file to import: {string.Join(", ", ParamsDict.Keys)}",
+                CommandOptionType.MultipleValue
+            );
+            var max_files_per_type_arg = cla.Option(
+                "--n-files <n>",
+                "Number of files to import per type. The table will be truncated.",
+                CommandOptionType.SingleValue
+            );
+            cla.HelpOption("-? | -h | --help");
+            cla.OnExecute(() => {
+                int? max_files_per_type = max_files_per_type_arg.HasValue() ? int.Parse(max_files_per_type_arg.Value()) : (int?)null;
+                Main2(import_types_arg.Values, max_files_per_type);
+                return 0;
+            });
+            cla.Execute(args);
+        }
+
+        public static void Main2(List<string> import_types, int? max_files_per_type)
         {
             var start = DateTime.Now;
             Action<string> Log = s => Console.WriteLine($"{(DateTime.Now - start).TotalSeconds,9:###0.000}: {s}");
             Log($".NET Version {PlatformServices.Default.Application.RuntimeFramework.FullName}");
 
-            xmldinges.NET.ProcessDir.OpenAll(@"C:\Users\Arjen\BAGDATA\inspireadressen", Log);
+            xmldinges.NET.ProcessDir.OpenAll(
+                @"C:\Users\Arjen\BAGDATA\inspireadressen",
+                log: Log,
+                import_types: import_types,
+                max_files_per_type: max_files_per_type
+            );
         }
 
         private static TimeZoneInfo GetCET()
@@ -58,6 +87,7 @@ namespace ConsoleApplication
         static readonly XNamespace NS_BAG_LVC = XMLNS_BAG_LVC;
         static readonly XNamespace NS_BAG_TYPE = XMLNS_BAG_TYPE;
         static readonly XName BAG_LVC_Nummeraanduiding = NS_BAG_LVC + "Nummeraanduiding";
+        static readonly XName BAG_LVC_Pand = NS_BAG_LVC + "Pand";
         static readonly XName BAG_LVC_Woonplaats = NS_BAG_LVC + "Woonplaats";
         static readonly XName BAG_LVC_Verblijfsobject = NS_BAG_LVC + "Verblijfsobject";
         static readonly XName BAG_LVC_Identificatie = NS_BAG_LVC + "identificatie";
@@ -88,6 +118,9 @@ namespace ConsoleApplication
         static readonly XName BAG_LVC_gerelateerdeOpenbareRuimte = NS_BAG_LVC + "gerelateerdeOpenbareRuimte";
         static readonly XName BAG_LVC_typeAdresseerbaarObject = NS_BAG_LVC + "typeAdresseerbaarObject";
         static readonly XName BAG_LVC_nummeraanduidingStatus = NS_BAG_LVC + "nummeraanduidingStatus";
+        static readonly XName BAG_LVC_pandGeometrie = NS_BAG_LVC + "pandGeometrie";
+        static readonly XName BAG_LVC_bouwjaar = NS_BAG_LVC + "bouwjaar";
+        static readonly XName BAG_LVC_pandstatus = NS_BAG_LVC + "pandstatus";
 
 
         struct ImportParams
@@ -100,6 +133,51 @@ namespace ConsoleApplication
 
         static Dictionary<string, ImportParams> ParamsDict = new Dictionary<string, ImportParams>()
         {
+            ["PND"] = new ImportParams
+            {
+                /*
+                    55.01 Pandidentificatie
+                    55.02 Indicatie geconstateerd pand
+                    55.20 Pandgeometrie
+                    55.30 Oorspronkelijk bouwjaar pand
+                    55.31 Pandstatus
+                    55.91 Datum begin geldigheid pandgegevens
+                    55.92 Datum einde geldigheid pandgegevens
+                    55.93 Aanduiding pandgegevens in onderzoek
+                    55.97 Documentdatum mutatie pand
+                    55.98 Documentnummer mutatie pand
+                */
+                table_name = "pand",
+                column_names = new[] {
+                    "identificatie",
+                    "aanduidingrecordinactief",
+                    "aanduidingrecordcorrectie",
+                    "officieel",
+                    "geometrie",
+                    "bouwjaar",
+                    "status",
+                    "begindatumtijdvakgeldigheid",
+                    "einddatumtijdvakgeldigheid",
+                    "inonderzoek",
+                },
+                element_name = BAG_LVC_Pand,
+                parse = e =>
+                {
+                    var tv = e.Element(BAG_LVC_Tijdvakgeldigheid);
+                    return new object[] {
+                        e.Element(BAG_LVC_Identificatie).Value,                               // identificatie
+                        parseJN(e.Element(BAG_LVC_AanduidingRecordInactief).Value).Value,     // aanduidingrecordinactief
+                        int.Parse(e.Element(BAG_LVC_AanduidingRecordCorrectie).Value),        // aanduidingrecordcorrectie
+                        parseJN(e.Element(BAG_LVC_Officieel).Value).Value,                    // officieel
+                        parseGML(e.Element(BAG_LVC_pandGeometrie).Elements().Single()),       // geometrie
+                        int.Parse(e.Element(BAG_LVC_bouwjaar).Value),                         // bouwjaar
+                        e.Element(BAG_LVC_pandstatus).Value,                                  // status
+                        parseDate(tv.Element(BAGyypebegindatumTijdvakGeldigheid)?.Value),     // begindatumtijdvakgeldigheid
+                        parseDate(tv.Element(BAGyypeeinddatumTijdvakGeldigheid)?.Value),      // einddatumtijdvakgeldigheid
+                        parseJN(e.Element(BAG_LVC_InOnderzoek).Value).Value,                  // inonderzoek
+                   };
+                },
+            },
             ["NUM"] = new ImportParams
             {
                 /*
@@ -117,7 +195,7 @@ namespace ConsoleApplication
                     11.66 Type adresseerbaar object
                     11.67 Documentdatum mutatie nummeraanduiding
                     11.68 Documentnummer mutatie nummeraanduiding
-                    11.69 Nummeraanduidingstatus 
+                    11.69 Nummeraanduidingstatus
                 */
                 table_name = "nummeraanduiding",
                 column_names = new[] {
@@ -174,7 +252,7 @@ namespace ConsoleApplication
                     11.75 Aanduiding woonplaatsgegevens in onderzoek
                  !! 11.77 Documentdatum mutatie woonplaats
                  !! 11.78 Documentnummer mutatie woonplaats
-                    11.79 Woonplaatsstatus 
+                    11.79 Woonplaatsstatus
                 */
                 table_name = "woonplaats",
                 column_names = new[] {
@@ -263,17 +341,17 @@ namespace ConsoleApplication
 
         };
 
-        public static void Import(IEnumerable<System.IO.Stream> input_streams, Action<string> Log, string key)
+        public static void Import(IEnumerable<System.IO.Stream> input_streams, Action<string> log, string key, int? max_files_per_type)
         {
 
             var p = ParamsDict[key];
 
-            Log("Parsing XML");
+            log("Parsing XML");
 
             var c = new BlockingCollection<object[]>(1000);
 
             var t1 = Task.Factory.StartNew(
-                () => TruncateAndCopy(table: p.table_name, columns: p.column_names, data: c, log: Log),
+                () => TruncateAndCopy(table: p.table_name, columns: p.column_names, data: c, log: log),
                 TaskCreationOptions.AttachedToParent
             );
 
@@ -291,23 +369,23 @@ namespace ConsoleApplication
                                 c.Add(p.parse(e));
                                 r++;
                             }
-                            Log($"{++n} files written, {r} records {c.Count} items quequed");
+                            log($"{++n,5} files written, {r,9} records {c.Count,9} items queued");
                             input_stream.Dispose();
-                            // TEST XXX
-                            // if (n >= 10)
-                            //    break;
+
+                            if (max_files_per_type.HasValue && n >= max_files_per_type.Value)
+                                break;
                         }
-                        Log($"Done writing to queue: {c.Count} items left");
+                        log($"Done writing to queue: {c.Count} items left");
                     }
                     finally
                     {
-                        Log("Cleanup: CompleteAdding()");
+                        log("Cleanup: CompleteAdding()");
                         c.CompleteAdding();
                     }
                 }
             );
             Task.WaitAll(new[] { t1, t2 });
-            Log("All done");
+            log("All done");
         }
 
         private static void TruncateAndCopy(string table, string[] columns, BlockingCollection<object[]> data, Action<string> log)
