@@ -16,6 +16,7 @@ namespace xmldinges.NET
             Regex is_num = new Regex(@"^9999NUM[0-9]{8}\.zip$");
             Regex is_vbo = new Regex(@"^9999VBO[0-9]{8}\.zip$");
             Regex is_pnd = new Regex(@"^9999PND[0-9]{8}\.zip$");
+            Regex is_opr = new Regex(@"^9999OPR[0-9]{8}\.zip$");
             Regex is_gem_wpl = new Regex(@"^GEM-WPL-RELATIE-[0-9]{8}\.zip$");
             Regex is_zip = new Regex(@"^9999...[0-9]{8}\.zip$");
 
@@ -71,6 +72,10 @@ namespace xmldinges.NET
                 else if (is_pnd.IsMatch(filename))
                 {
                     addimporttask("PND");
+                }
+                else if (is_opr.IsMatch(filename))
+                {
+                    addimporttask("OPR");
                 }
                 else if (is_zip.IsMatch(filename))
                 {

@@ -87,6 +87,7 @@ namespace ConsoleApplication
         static readonly XNamespace NS_BAG_LVC = XMLNS_BAG_LVC;
         static readonly XNamespace NS_BAG_TYPE = XMLNS_BAG_TYPE;
         static readonly XName BAG_LVC_Nummeraanduiding = NS_BAG_LVC + "Nummeraanduiding";
+        static readonly XName BAG_LVC_OpenbareRuimte = NS_BAG_LVC + "OpenbareRuimte";
         static readonly XName BAG_LVC_Pand = NS_BAG_LVC + "Pand";
         static readonly XName BAG_LVC_Woonplaats = NS_BAG_LVC + "Woonplaats";
         static readonly XName BAG_LVC_Verblijfsobject = NS_BAG_LVC + "Verblijfsobject";
@@ -115,12 +116,16 @@ namespace ConsoleApplication
         static readonly XName BAG_LVC_huisnummertoevoeging = NS_BAG_LVC + "huisnummertoevoeging";
         static readonly XName BAG_LVC_postcode = NS_BAG_LVC + "postcode";
         static readonly XName BAG_LVC_GerelateerdeWoonplaats = NS_BAG_LVC + "GerelateerdeWoonplaats";
+        static readonly XName BAG_LVC_gerelateerdeWoonplaats = NS_BAG_LVC + "gerelateerdeWoonplaats";
         static readonly XName BAG_LVC_gerelateerdeOpenbareRuimte = NS_BAG_LVC + "gerelateerdeOpenbareRuimte";
         static readonly XName BAG_LVC_typeAdresseerbaarObject = NS_BAG_LVC + "typeAdresseerbaarObject";
         static readonly XName BAG_LVC_nummeraanduidingStatus = NS_BAG_LVC + "nummeraanduidingStatus";
         static readonly XName BAG_LVC_pandGeometrie = NS_BAG_LVC + "pandGeometrie";
         static readonly XName BAG_LVC_bouwjaar = NS_BAG_LVC + "bouwjaar";
         static readonly XName BAG_LVC_pandstatus = NS_BAG_LVC + "pandstatus";
+        static readonly XName BAG_LVC_openbareRuimteNaam = NS_BAG_LVC + "openbareRuimteNaam";
+        static readonly XName BAG_LVC_openbareRuimteType = NS_BAG_LVC + "openbareRuimteType";
+        static readonly XName BAG_LVC_openbareruimteStatus = NS_BAG_LVC + "openbareruimteStatus";
 
 
         struct ImportParams
@@ -133,6 +138,57 @@ namespace ConsoleApplication
 
         static Dictionary<string, ImportParams> ParamsDict = new Dictionary<string, ImportParams>()
         {
+            ["OPR"] = new ImportParams
+            {
+                /*
+                    Identificatiecode openbare ruimte
+                    aanduidingRecordInactief
+                    aanduidingRecordCorrectie
+                    Naam
+                    Indicatie geconstateerde openbare ruimte
+                    Datum begin geldigheid gegevens openbare ruimte
+                    Datum einde geldigheid gegevens openbare ruimte
+                    Aanduiding gegevens openbare ruimte in onderzoek
+                    Identificatiecode bijbehorende woonplaats
+                    Type openbare ruimte
+                    Status openbare ruimte
+                */
+                table_name = "openbare_ruimte",
+                column_names = new[] {
+                    "identificatie",
+                    "inactief",
+                    "correctienummer",
+                    "naam",
+                    "officieel",
+                    "begindatumtijdvakgeldigheid",
+                    "einddatumtijdvakgeldigheid",
+                    "inonderzoek",
+                    "woonplaats_id",
+                    "type",
+                    "status",
+                },
+                element_name = BAG_LVC_OpenbareRuimte,
+                parse = e =>
+                {
+                    // Console.WriteLine(e);
+
+                    var tv = e.Element(BAG_LVC_Tijdvakgeldigheid);
+                    return new object[] {
+                        e.Element(BAG_LVC_Identificatie).Value,                               // identificatie
+                        parseJN(e.Element(BAG_LVC_AanduidingRecordInactief).Value).Value,     // inactief
+                        int.Parse(e.Element(BAG_LVC_AanduidingRecordCorrectie).Value),        // correctienummer
+                        e.Element(BAG_LVC_openbareRuimteNaam).Value,                          // naam
+                        parseJN(e.Element(BAG_LVC_Officieel).Value).Value,                    // officieel
+                        parseDate(tv.Element(BAGyypebegindatumTijdvakGeldigheid).Value),      // begindatumtijdvakgeldigheid
+                        parseDate(tv.Element(BAGyypeeinddatumTijdvakGeldigheid)?.Value),      // einddatumtijdvakgeldigheid
+                        parseJN(e.Element(BAG_LVC_InOnderzoek).Value).Value,                  // inonderzoek
+                        e.Element(BAG_LVC_gerelateerdeWoonplaats)
+                            .Element(BAG_LVC_Identificatie).Value,                            // woonplaats_id
+                        e.Element(BAG_LVC_openbareRuimteType).Value,                          // type
+                        e.Element(BAG_LVC_openbareruimteStatus).Value,                        // status
+                   };
+                },
+            },
             ["PND"] = new ImportParams
             {
                 /*
@@ -150,8 +206,8 @@ namespace ConsoleApplication
                 table_name = "pand",
                 column_names = new[] {
                     "identificatie",
-                    "aanduidingrecordinactief",
-                    "aanduidingrecordcorrectie",
+                    "inactief",
+                    "correctienummer",
                     "officieel",
                     "geometrie",
                     "bouwjaar",
@@ -166,13 +222,13 @@ namespace ConsoleApplication
                     var tv = e.Element(BAG_LVC_Tijdvakgeldigheid);
                     return new object[] {
                         e.Element(BAG_LVC_Identificatie).Value,                               // identificatie
-                        parseJN(e.Element(BAG_LVC_AanduidingRecordInactief).Value).Value,     // aanduidingrecordinactief
-                        int.Parse(e.Element(BAG_LVC_AanduidingRecordCorrectie).Value),        // aanduidingrecordcorrectie
+                        parseJN(e.Element(BAG_LVC_AanduidingRecordInactief).Value).Value,     // inactief
+                        int.Parse(e.Element(BAG_LVC_AanduidingRecordCorrectie).Value),        // correctienummer
                         parseJN(e.Element(BAG_LVC_Officieel).Value).Value,                    // officieel
                         parseGML(e.Element(BAG_LVC_pandGeometrie).Elements().Single()),       // geometrie
                         int.Parse(e.Element(BAG_LVC_bouwjaar).Value),                         // bouwjaar
                         e.Element(BAG_LVC_pandstatus).Value,                                  // status
-                        parseDate(tv.Element(BAGyypebegindatumTijdvakGeldigheid)?.Value),     // begindatumtijdvakgeldigheid
+                        parseDate(tv.Element(BAGyypebegindatumTijdvakGeldigheid).Value),     // begindatumtijdvakgeldigheid
                         parseDate(tv.Element(BAGyypeeinddatumTijdvakGeldigheid)?.Value),      // einddatumtijdvakgeldigheid
                         parseJN(e.Element(BAG_LVC_InOnderzoek).Value).Value,                  // inonderzoek
                    };
@@ -200,8 +256,8 @@ namespace ConsoleApplication
                 table_name = "nummeraanduiding",
                 column_names = new[] {
                     "identificatie",
-                    "aanduidingrecordinactief",
-                    "aanduidingrecordcorrectie",
+                    "inactief",
+                    "correctienummer",
                     "officieel",
                     "huisnummer",
                     "huisletter",
@@ -221,8 +277,8 @@ namespace ConsoleApplication
                     var tv = e.Element(BAG_LVC_Tijdvakgeldigheid);
                     return new object[] {
                         e.Element(BAG_LVC_Identificatie).Value,                               // identificatie
-                        parseJN(e.Element(BAG_LVC_AanduidingRecordInactief).Value).Value,     // aanduidingrecordinactief
-                        int.Parse(e.Element(BAG_LVC_AanduidingRecordCorrectie).Value),        // aanduidingrecordcorrectie
+                        parseJN(e.Element(BAG_LVC_AanduidingRecordInactief).Value).Value,     // inactief
+                        int.Parse(e.Element(BAG_LVC_AanduidingRecordCorrectie).Value),        // correctienummer
                         parseJN(e.Element(BAG_LVC_Officieel).Value).Value,                    // officieel
                         e.Element(BAG_LVC_huisnummer).Value,                                  // huisnummer
                         e.Element(BAG_LVC_huisletter)?.Value,                                 // huisletter
@@ -230,7 +286,7 @@ namespace ConsoleApplication
                         e.Element(BAG_LVC_postcode)?.Value,                                   // postcode
                         e.Element(BAG_LVC_GerelateerdeWoonplaats)
                             ?.Element(BAG_LVC_Identificatie).Value,                           // woonplaats_id
-                        parseDate(tv.Element(BAGyypebegindatumTijdvakGeldigheid)?.Value),     // begindatumtijdvakgeldigheid
+                        parseDate(tv.Element(BAGyypebegindatumTijdvakGeldigheid).Value),     // begindatumtijdvakgeldigheid
                         parseDate(tv.Element(BAGyypeeinddatumTijdvakGeldigheid)?.Value),      // einddatumtijdvakgeldigheid
                         parseJN(e.Element(BAG_LVC_InOnderzoek).Value).Value,                  // inonderzoek
                         e.Element(BAG_LVC_gerelateerdeOpenbareRuimte)
@@ -257,12 +313,12 @@ namespace ConsoleApplication
                 table_name = "woonplaats",
                 column_names = new[] {
                     "identificatie",
+                    "inactief",
+                    "correctienummer",
                     "woonplaatsnaam",
                     "woonplaatsgeometrie",
-                    "aanduidingrecordinactief",
                     "officieel",
                     "inonderzoek",
-                    "aanduidingrecordcorrectie",
                     "begindatumtijdvakgeldigheid",
                     "einddatumtijdvakgeldigheid",
                     "woonplaatsstatus",
@@ -273,13 +329,13 @@ namespace ConsoleApplication
                     var tv = e.Element(BAG_LVC_Tijdvakgeldigheid);
                     return new object[] {
                         e.Element(BAG_LVC_Identificatie).Value,                               // identificatie
+                        parseJN(e.Element(BAG_LVC_AanduidingRecordInactief).Value).Value,     // inactief
+                        int.Parse(e.Element(BAG_LVC_AanduidingRecordCorrectie).Value),        // correctienummer
                         e.Element(BAG_LVC_WoonplaatsNaam).Value,                              // woonplaatsnaam
                         parseGML(e.Element(BAG_LVC_WoonplaatsGeometrie).Elements().Single()), // woonplaatsgeometrie
-                        parseJN(e.Element(BAG_LVC_AanduidingRecordInactief).Value).Value,     // aanduidingrecordinactief
                         parseJN(e.Element(BAG_LVC_Officieel).Value).Value,                    // officieel
                         parseJN(e.Element(BAG_LVC_InOnderzoek).Value).Value,                  // inonderzoek
-                        int.Parse(e.Element(BAG_LVC_AanduidingRecordCorrectie).Value),        // aanduidingrecordcorrectie
-                        parseDate(tv.Element(BAGyypebegindatumTijdvakGeldigheid)?.Value),     // begindatumtijdvakgeldigheid
+                        parseDate(tv.Element(BAGyypebegindatumTijdvakGeldigheid).Value),     // begindatumtijdvakgeldigheid
                         parseDate(tv.Element(BAGyypeeinddatumTijdvakGeldigheid)?.Value),      // einddatumtijdvakgeldigheid
                         e.Element(BAG_LVC_WoonplaatsStatus).Value,                            // woonplaatsstatus
                    };
@@ -290,12 +346,12 @@ namespace ConsoleApplication
                 table_name = "verblijfsobject",
                 column_names = new[] {
                     "identificatie",
-                    "aanduidingrecordinactief",
+                    "inactief",
+                    "correctienummer",
                     "officieel",
                     "inonderzoek",
                     "verblijfsobjectstatus",
                     "gebruiksdoelen",
-                    "aanduidingrecordcorrectie",
                     "begindatumtijdvakgeldigheid",
                     "einddatumtijdvakgeldigheid",
                     "verblijfsobjectgeometrie",
@@ -307,23 +363,19 @@ namespace ConsoleApplication
                 element_name = BAG_LVC_Verblijfsobject,
                 parse = e =>
                 {
-                    //Console.WriteLine(BAG_LVC_Identificatie);
-                    //Console.WriteLine(e.Element(BAG_LVC_Identificatie).Value);
-                    //Console.WriteLine(e);
-
                     var tv = e.Element(BAG_LVC_Tijdvakgeldigheid);
                     var rel_ads = e.Element(BAG_LVC_gerelateerdeAdressen);
                     return new object[] {
                         e.Element(BAG_LVC_Identificatie).Value,                                    // identificatie
-                        parseJN(e.Element(BAG_LVC_AanduidingRecordInactief).Value).Value,          // aanduidingrecordinactief
+                        parseJN(e.Element(BAG_LVC_AanduidingRecordInactief).Value).Value,          // inactief
+                        int.Parse(e.Element(BAG_LVC_AanduidingRecordCorrectie).Value),             // correctienummer
                         parseJN(e.Element(BAG_LVC_Officieel).Value).Value,                         // officieel
                         parseJN(e.Element(BAG_LVC_InOnderzoek).Value).Value,                       // inonderzoek
                         e.Element(BAG_LVC_verblijfsobjectStatus).Value,                            // verblijfsobjectstatus
                         e.Elements(BAG_LVC_gebruiksdoelVerblijfsobject)
                          .Select(g => g.Value)
                          .ToList(),                                                                // gebruiksdoelen
-                        int.Parse(e.Element(BAG_LVC_AanduidingRecordCorrectie).Value),             // aanduidingrecordcorrectie
-                        parseDate(tv.Element(BAGyypebegindatumTijdvakGeldigheid)?.Value),          // begindatumtijdvakgeldigheid
+                        parseDate(tv.Element(BAGyypebegindatumTijdvakGeldigheid).Value),          // begindatumtijdvakgeldigheid
                         parseDate(tv.Element(BAGyypeeinddatumTijdvakGeldigheid)?.Value),           // einddatumtijdvakgeldigheid
                         parseGML(e.Element(BAG_LVC_verblijfsobjectGeometrie).Elements().Single()), // verblijfsobjectgeometrie
                         e.Elements(BAG_LVC_gerelateerdPand).Select(
