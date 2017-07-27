@@ -1,22 +1,39 @@
 {
-    "version": "0.2.0",
-    "configurations": [
+   // Use IntelliSense to find out which attributes exist for C# debugging
+   // Use hover for the description of the existing attributes
+   // For further information visit https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md
+   "version": "0.2.0",
+   "configurations": [
+       {
+           "name": "Importer",
+           "type": "coreclr",
+           "request": "launch",
+           "preLaunchTask": "build",
+           "program": "${workspaceRoot}/src/Importer/bin/Debug/netcoreapp2.0/Importer.dll",
+           "args": ["--n-files=1", "--import-dir=/mnt/data/BAG/zips/", "--import-types=LIG"],
+           "cwd": "${workspaceRoot}/src/Importer",
+           "stopAtEntry": false,
+           "console": "internalConsole"
+       },
         {
-            "name": ".NET Core Launch (console)",
+            "name": "Downloader",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
-            "program": "${workspaceRoot}\\bin\\Debug\\netcoreapp1.0\\xmldinges.NET.dll",
-            "args": [],
-            "cwd": "${workspaceRoot}",
-            "externalConsole": false,
-            "stopAtEntry": false
+            // If you have changed target frameworks, make sure to update the program path.
+            "program": "${workspaceRoot}/src/BagDownloader/bin/Debug/netcoreapp2.0/BagDownloader.dll",
+            "args": ["--path", "/mnt/data/BAG/Download", "--force"],
+            "cwd": "${workspaceRoot}/src/BagDownloader",
+            // For more information about the 'console' field, see https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md#console-terminal-window
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "internalConsoleOptions": "openOnSessionStart"
         },
         {
             "name": ".NET Core Attach",
             "type": "coreclr",
             "request": "attach",
-            "processId": "${command.pickProcess}"
+            "processId": "${command:pickProcess}"
         }
     ]
 }

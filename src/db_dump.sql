@@ -66,6 +66,12 @@ CREATE TYPE status_openbare_ruimte AS ENUM (
     'Naamgeving ingetrokken'
 );
 
+CREATE TYPE plaatsstatus AS ENUM (
+    'Plaats aangewezen',
+    'Plaats ingetrokken'
+);
+
+
 CREATE TABLE openbare_ruimte (
     identificatie bag_id NOT NULL,
     inactief boolean NOT NULL,
@@ -118,8 +124,8 @@ CREATE TABLE verblijfsobject (
     begindatumtijdvakgeldigheid timestamp with time zone NOT NULL,
     einddatumtijdvakgeldigheid timestamp with time zone,
     inonderzoek boolean NOT NULL,
-    status verblijfsobjectstatus NOT NULL,
-    geometrie geometry NOT NULL,
+    verblijfsobjectstatus verblijfsobjectstatus NOT NULL,
+    verblijfsobjectgeometrie geometry NOT NULL,
     officieel boolean NOT NULL,
     nevenadres_ids bag_ids NOT NULL,
     hoofdadres_id bag_id NOT NULL,
@@ -132,14 +138,57 @@ CREATE TABLE woonplaats (
     identificatie bag_id NOT NULL,
     inactief boolean NOT NULL,
     correctienummer integer NOT NULL,
-    naam character varying NOT NULL,
+    woonplaatsnaam character varying NOT NULL,
     begindatumtijdvakgeldigheid timestamp with time zone NOT NULL,
     einddatumtijdvakgeldigheid timestamp with time zone,
     inonderzoek boolean NOT NULL,
-    status status_woonplaats NOT NULL,
-    geometrie geometry NOT NULL,
+    woonplaatsstatus status_woonplaats NOT NULL,
+    woonplaatsgeometrie geometry NOT NULL,
     officieel boolean NOT NULL
 );
+
+CREATE TABLE standplaats (
+    identificatie bag_id NOT NULL,
+    inactief boolean NOT NULL,
+    correctienummer integer NOT NULL,
+    officieel boolean NOT NULL,
+    standplaatsstatus plaatsstatus NOT NULL,
+    hoofdadres_id bag_id NOT NULL,
+    nevenadres_ids bag_ids NOT NULL,
+    standplaatsgeometrie geometry NOT NULL,
+    inonderzoek boolean NOT NULL,
+    begindatumtijdvakgeldigheid timestamp with time zone NOT NULL,
+    einddatumtijdvakgeldigheid timestamp with time zone
+);
+
+CREATE TABLE ligplaats (
+    identificatie bag_id NOT NULL,
+    inactief boolean NOT NULL,
+    correctienummer integer NOT NULL,
+    officieel boolean NOT NULL,
+    ligplaatsstatus plaatsstatus NOT NULL,
+    hoofdadres_id bag_id NOT NULL,
+    nevenadres_ids bag_ids NOT NULL,
+    ligplaatsgeometrie geometry NOT NULL,
+    inonderzoek boolean NOT NULL,
+    begindatumtijdvakgeldigheid timestamp with time zone NOT NULL,
+    einddatumtijdvakgeldigheid timestamp with time zone
+);
+
+CREATE TABLE perceel (
+    identificatie varchar NOT NULL,
+    geometrie geometry NOT NULL
+);
+
+
+CREATE INDEX "idx_pand_geometrie" ON pand USING gist (geometrie);
+CREATE INDEX "idx_verblijfsobject_geometrie" ON verblijfsobject USING gist (verblijfsobjectgeometrie);
+CREATE INDEX "idx_woonplaats_geometrie" ON woonplaats USING gist (woonplaatsgeometrie);
+CREATE INDEX "idx_standplaats_geometrie" ON standplaats USING gist (standplaatsgeometrie);
+CREATE INDEX "idx_ligplaats_geometrie" ON ligplaats USING gist (ligplaatsgeometrie);
+CREATE INDEX "idx_perceel_geometrie" ON perceel USING gist (geometrie);
+
+
 
 -- CREATE UNIQUE INDEX woonplaats_identificatie_idx ON woonplaats USING btree (identificatie) WHERE ((einddatumtijdvakgeldigheid IS NULL) AND (NOT inactief));
 
